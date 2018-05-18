@@ -160,8 +160,9 @@ pub fn page_remove(pgdir: *const usize, va: usize, pte: *mut usize) {
     let page = pa2page(pte as usize);
     if (unsafe { &mut *page }).page_ref_dec() <= 0 {
         // free_page(page);
-        unsafe { (&ALLOCATOR).dealloc(pte as *mut u8, Layout::from_size_align_unchecked(PGSIZE, PGSIZE)); }
+        dealloc_pages(pte as *mut u8, 1)
     }
     unsafe { *pte = 0; }
     unsafe{ tlb_invalidate(va) };
 }
+

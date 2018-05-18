@@ -42,7 +42,12 @@ impl Allocator {
     pub fn init_memmap(&self, base: usize, npage: usize, begin: usize) {
         self.0.lock().as_mut().expect("allocator uninitialized").init_memmap(base, npage, begin);
     }
+
+)
 }
+
+
+
 
 unsafe impl<'a> Alloc for &'a Allocator {
 
@@ -79,3 +84,34 @@ fn memory_map() -> Option<(usize, usize)> {
 }
 
 
+
+pub fn alloc_pages(npage: usize) -> Result<*mut u8, AllocErr> {
+    match unsafe { (&ALLOCATOR).alloc(Layout::from_size_align_unchecked(PGSIZE * npage, PGSIZE)) } {
+        Ok(page) => { return page; },
+        Err(_) => { return Err( AllocErr::Unsupported { details: "alloc page failed" } ); }
+    }
+}
+
+pub fn dealloc_pages(ptr: *mut u8, npage: usize){
+    unsafe { (&ALLOCATOR).dealloc(pte as *mut u8, Layout::from_size_align_unchecked(PGSIZE, PGSIZE)); }
+}
+
+pub fn pgdir_alloc_page(pgdir: *const usize, va: usize, perm: usize) -> Result<*mut u8, AllocErr> {
+    match alloc_pages(1) {
+        Ok(page_ptr) => {
+            let page = page_ptr as *mut Page;
+            match page_insert(pgdir, page, va, perm) {
+                Ok(_) => {
+                    return Ok(page_ptr);
+                },
+                Err(_) => {
+                    unsafe { (&ALLOCATOR).dealloc(page_ptr as *mut u8, Layout::from_size_align_unchecked(PGSIZE, PGSIZE)) };
+                    return Err( AllocErr::Unsupported { details: "page insert failed" } );
+                }
+            };
+        },
+        Err(_) => {
+            return Err( AllocErr::Unsupported { details: "alloc page failed" } );
+        }
+    }
+}

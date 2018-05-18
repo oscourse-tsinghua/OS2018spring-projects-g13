@@ -73,3 +73,90 @@ impl Process {
         }
     }
 }
+
+
+
+fn memcpy(dest: *mut u8, src: *const u8, n: usize) -> *mut u8 {
+    let mut i = 0;
+    while i < n {
+        *dest.offset(i as isize) = *src.offset(i as isize);
+        i += 1;
+    }
+    return dest;
+}
+
+fn map(va: usize, mem_size: u32, file_size: u32, phoff: usize) {
+    let offset = va - align_down(va, PGSIZE);
+    if offset > 0 {
+        let page = match alloc_pages(1) {
+            Ok(page) => { page },
+            Err(_) => {return Err(-1); }
+        }
+        let src = phoff as *mut u8;
+        let dst = page2kva(page) + offset
+        memcpy(src, dest, PGISZE - offset);
+        
+    }
+}
+
+
+static int load_icode_mapper(u_long va, u_int32_t sgsize,
+                             u_char *bin, u_int32_t bin_size, void *user_data)
+{
+    struct Env *env = (struct Env *)user_data;
+    struct Page *p = NULL;
+    u_long i;
+    int r;
+    u_long offset = va - ROUNDDOWN(va, BY2PG);
+    
+    /*Step 1: load all content of bin into memory. */
+    if (offset)
+    {
+        /* Hint: You should alloc a page and increase the reference count of it. */
+        if ((r = page_alloc(&p)) < 0)
+        {
+            return r;
+        }
+        
+        char *src = (char *)((u_long)bin);
+        char *dest = (char *)(page2kva(p) + offset);
+        bcopy(src, dest, BY2PG - offset);
+        char *temp_va = (char *)(va - offset);
+        page_insert(env->env_ttbr0, p, (u_long)temp_va, ATTRIB_AP_RW_ALL);
+    }
+    
+    for (i = offset; i < bin_size; i += BY2PG)
+    {
+        /* Hint: You should alloc a page and increase the reference count of it. */
+        if ((r = page_alloc(&p)) < 0)
+        {
+            return r;
+        }
+        if (bin_size - i >= BY2PG)
+        {
+            bcopy(bin + i, (void *)page2kva(p), BY2PG);
+        }
+        else
+        {
+            bcopy(bin + i, (void *)page2kva(p), bin_size - i);
+        }
+        
+        page_insert(env->env_ttbr0, p, va + i, ATTRIB_AP_RW_ALL);
+    }
+    
+    /*Step 2: alloc pages to reach `sgsize` when `bin_size` < `sgsize`.
+     * i has the value of `bin_size` now. */
+    while (i < sgsize)
+    {
+        if ((r = page_alloc(&p)) < 0)
+        {
+            return r;
+        }
+        
+        page_insert(env->env_ttbr0, p, va + i, ATTRIB_AP_RW_ALL);
+        
+        i += BY2PG;
+    }
+    
+    return 0;
+}
